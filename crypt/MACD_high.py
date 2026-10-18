@@ -11,11 +11,11 @@ load_dotenv()
 API_KEY = os.getenv("BYBIT_KEY")
 API_SECRET = os.getenv("BYBIT_SECRET")
 
-SYMBOL = "DOGEUSDT"
-TIMEFRAME = "1"
-QTY = 1170
-LEVERAGE = 5
-CHECK_INTERVAL = 20  # секунд
+SYMBOL = "HUSDT"
+TIMEFRAME = "60"
+QTY = 4340
+LEVERAGE = 10
+CHECK_INTERVAL = 300  # секунд
 
 # ===== ПОДКЛЮЧЕНИЕ =====
 session = HTTP(
@@ -87,10 +87,11 @@ def set_leverage():
 def check_long_entry(df):
     last = df.iloc[-1]
     prev = df.iloc[-2]
+    d_prev = df.iloc[-3]
 
     # MACD пересёк сигнальную снизу вверх
     return (
-        prev['macd'] < prev['macd_signal'] and
+        d_prev['macd'] < d_prev['macd_signal'] and prev['macd'] >= prev['macd_signal'] and
         last['macd'] >= last['macd_signal']
     )
 

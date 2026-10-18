@@ -11,11 +11,10 @@ load_dotenv()
 API_KEY = os.getenv("BYBIT_KEY")
 API_SECRET = os.getenv("BYBIT_SECRET")
 
-SYMBOL = "ADAUSDT"
+SYMBOL = "DOGEUSDT"
 TIMEFRAME = "1"
-QTY = 2182
-LEVERAGE = 50
-CHECK_INTERVAL = 30  # секунд
+LEVERAGE = 5
+CHECK_INTERVAL = 10  # секунд
 
 # ===== ПОДКЛЮЧЕНИЕ =====
 session = HTTP(
@@ -23,6 +22,35 @@ session = HTTP(
     api_key=API_KEY,
     api_secret=API_SECRET,
 )
+
+
+# ===== РАСЧЁТ ОБЪЁМА =====
+def get_qty() -> float:
+    # Получаем шаг лота для символа
+    info = session.get_instruments_info(
+        category="linear",
+        symbol=SYMBOL
+    )
+    qty_step = float(info['result']['list'][0]['lotSizeFilter']['qtyStep'])
+
+    current_price = float(session.get_tickers(
+        category="linear",
+        symbol=SYMBOL
+    )['result']['list'][0]['lastPrice'])
+
+    balance = session.get_wallet_balance(accountType="UNIFIED")
+    usdt = float(balance['result']['list'][0]['totalAvailableBalance'])
+
+    print(f"Баланс: {usdt} USDT | Цена: {current_price} | Шаг лота: {qty_step}")
+
+    qty = (usdt * LEVERAGE) / current_price
+
+    # Округляем вниз по шагу лота
+    qty = (qty // qty_step) * qty_step
+
+    decimals = len(str(qty_step).rstrip('0').split('.')[-1]) if '.' in str(qty_step) else 0
+    return round(qty, decimals)
+
 
 # ===== ПОЛУЧЕНИЕ СВЕЧЕЙ =====
 def get_klines():
@@ -34,13 +62,13 @@ def get_klines():
     )
 
     df = pd.DataFrame(response['result']['list'])
-    df = df.astype(float)
-    df = df.iloc[::-1]
-
+    df = df.iloc[::-1].reset_index(drop=True)
     df.columns = [
         "timestamp", "open", "high",
         "low", "close", "volume", "turnover"
     ]
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
 
     return df
 
@@ -48,10 +76,8 @@ def get_klines():
 # ===== ИНДИКАТОРЫ =====
 def calculate_indicators(df):
     macd = MACD(close=df['close'])
-
     df['macd'] = macd.macd()
     df['macd_signal'] = macd.macd_signal()
-
     return df
 
 
@@ -61,12 +87,19 @@ def has_position():
         category="linear",
         symbol=SYMBOL
     )
-
     if not positions['result']['list']:
         return False
-
     size = float(positions['result']['list'][0]['size'])
     return size > 0
+
+
+def get_position_size() -> float:
+    """Возвращает реальный размер открытой позиции с биржи"""
+    positions = session.get_positions(
+        category="linear",
+        symbol=SYMBOL
+    )
+    return float(positions['result']['list'][0]['size'])
 
 
 # ===== УСТАНОВКА ПЛЕЧА =====
@@ -88,7 +121,6 @@ def check_short_entry(df):
     last = df.iloc[-1]
     prev = df.iloc[-2]
 
-    # MACD пересёк сигнальную сверху вниз
     return (
         prev['macd'] > prev['macd_signal'] and
         last['macd'] <= last['macd_signal']
@@ -99,7 +131,6 @@ def check_short_exit(df):
     last = df.iloc[-1]
     prev = df.iloc[-2]
 
-    # MACD пересёк сигнальную снизу вверх
     return (
         prev['macd'] < prev['macd_signal'] and
         last['macd'] >= last['macd_signal']
@@ -109,13 +140,14 @@ def check_short_exit(df):
 # ===== ОРДЕРА =====
 def open_short():
     try:
-        print("Открываю SHORT")
+        qty = get_qty()
+        print(f"Открываю SHORT | Объём: {qty} DOGE")
         session.place_order(
             category="linear",
             symbol=SYMBOL,
             side="Sell",
             orderType="Market",
-            qty=QTY,
+            qty=str(qty),
             timeInForce="ImmediateOrCancel"
         )
     except Exception as e:
@@ -124,13 +156,14 @@ def open_short():
 
 def close_position():
     try:
-        print("Закрываю SHORT")
+        qty = get_position_size()  # берём реальный размер с биржи
+        print(f"Закрываю SHORT | Объём: {qty} DOGE")
         session.place_order(
             category="linear",
             symbol=SYMBOL,
             side="Buy",
             orderType="Market",
-            qty=QTY,
+            qty=str(qty),
             reduceOnly=True,
             timeInForce="ImmediateOrCancel"
         )
