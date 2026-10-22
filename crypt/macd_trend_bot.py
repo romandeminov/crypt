@@ -173,6 +173,20 @@ def set_leverage():
         if "110043" not in str(e):
             log(f"Ошибка установки плеча: {e}")
 
+def set_position_mode():
+    if DRY_RUN:
+        return
+    try:
+        session.switch_position_mode(
+            category="linear",
+            symbol=SYMBOL,
+            mode=0   # 0 = one-way
+        )
+        log("Режим позиции: one-way")
+    except Exception as e:
+        if "110025" not in str(e) and "not modified" not in str(e).lower():
+            log(f"Ошибка смены режима: {e}")
+
 
 # ===== ОРДЕРА =====
 def open_position(side, price, rules):
@@ -289,6 +303,7 @@ def main():
     log(f"Плечо: {LEVERAGE}x | Депозит на сделку: {DEPOSIT_PCT}% | SL/TP: {STOP_LOSS_PCT*100:.1f}%/{TAKE_PROFIT_PCT*100:.1f}%")
     log("=" * 55)
 
+    set_position_mode()
     rules = get_instrument_rules()
     set_leverage()
 
