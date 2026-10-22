@@ -103,6 +103,22 @@ def cross_down(df):
     last, prev = df.iloc[-1], df.iloc[-2]
     return prev['macd'] > prev['macd_signal'] and last['macd'] <= last['macd_signal'] and last['macd'] < 0
 
+def exit_cross_up(df):
+    """Простое пересечение вверх — для ВЫХОДА из шорта."""
+    last, prev = df.iloc[-1], df.iloc[-2]
+    return (
+        prev['macd'] < prev['macd_signal'] and
+        last['macd'] >= last['macd_signal']
+    )
+
+def exit_cross_down(df):
+    """Простое пересечение вниз — для ВЫХОДА из лонга."""
+    last, prev = df.iloc[-1], df.iloc[-2]
+    return (
+        prev['macd'] > prev['macd_signal'] and
+        last['macd'] <= last['macd_signal']
+    )
+
 
 # ===== ИНФОРМАЦИЯ ОБ ИНСТРУМЕНТЕ =====
 def get_instrument_rules():
@@ -329,9 +345,9 @@ def main():
             elif EXIT_ON_MACD:
                 # Позиция уже открыта — выходим по обратному пересечению MACD
                 side = dry_position["side"] if DRY_RUN else pos['side']
-                if side == "Buy" and cross_down(df):
+                if side == "Buy" and exit_cross_down(df):
                     close_position(pos)
-                elif side == "Sell" and cross_up(df):
+                elif side == "Sell" and exit_cross_up(df):
                     close_position(pos)
 
             time.sleep(CHECK_INTERVAL)
